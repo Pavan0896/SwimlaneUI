@@ -13,67 +13,68 @@ import {
   Input as ChakraInput,
   useDisclosure,
 } from "@chakra-ui/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Column from "./Column";
-import tasksData from "../tasks";
-
-const taskTransitionRules = {
-  "to-do": ["in-progress"],
-  "in-progress": ["done"],
-  done: [],
-};
+import axios from "axios";
 
 const SwimlaneBoard = () => {
-  const [tasks, setTasks] = useState(tasksData);
-  const [filteredTasks, setFilteredTasks] = useState(tasksData);
+  const [tasks, setTasks] = useState([]);
+  const [filteredTasks, setFilteredTasks] = useState([]);
   const [draggedTask, setDraggedTask] = useState(null);
   const [newStatus, setNewStatus] = useState("");
   const [taskHistory, setTaskHistory] = useState([]);
-  const [formData, setFormData] = useState({ additionalInfo: "" });
+  const [formData, setFormData] = useState({ title: "", additionalInfo: "" });
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const url = import.meta.env.VITE_BACKEND_URL;
+
   const {
     isOpen: isOpenAdditionalInfo,
     onOpen: onOpenAdditionalInfo,
     onClose: onCloseAdditionalInfo,
   } = useDisclosure();
-  const { isOpen, onOpen, onClose } = useDisclosure();
-  const [selectedTask, setSelectedTask] = useState(null);
+
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  const fetchTasks = async () => {
+    const response = await axios.get(`${url}/api/tasks`);
+    setTasks(response.data);
+    setFilteredTasks(response.data);
+  };
+
+  const fetchTaskHistory = async (title) => {
+    try {
+      if (!title) return;
+
+      const response = await axios.get(`${url}/api/task-history/${title}`);
+      setTaskHistory(response.data);
+    } catch (error) {
+      console.error(
+        "Error fetching task history:",
+        error.response ? error.response.data : error.message
+      );
+    }
+  };
 
   const handleDragStart = (task) => {
     setDraggedTask({ ...task, originalStatus: task.status });
   };
 
-  const handleDrop = (targetStatus) => {
+  const handleDrop = async (targetStatus) => {
     if (!draggedTask) return;
 
-    const allowedTransitions = taskTransitionRules[draggedTask.status];
-    if (!allowedTransitions.includes(targetStatus)) {
-      setNewStatus(targetStatus);
-      onOpenAdditionalInfo();
-      return;
-    }
-
-    const updatedHistory = [
-      ...taskHistory,
-      {
-        task: draggedTask.title,
-        from: draggedTask.status,
-        to: targetStatus,
-        date: new Date().toISOString(),
-      },
-    ];
-
-    const updatedTasks = tasks.map((t) =>
-      t.title === draggedTask.title ? { ...t, status: targetStatus } : t
-    );
-    setTaskHistory(updatedHistory);
-    setTasks(updatedTasks);
-    setFilteredTasks(updatedTasks);
-    setDraggedTask(null);
+    setNewStatus(targetStatus);
+    onOpenAdditionalInfo();
   };
 
   const handleTaskClick = (task) => {
     setSelectedTask(task);
-    onOpen();
+    fetchTaskHistory(task.title);
+    openHistoryModal();
   };
 
   const handleFilterChange = (e) => {
@@ -86,35 +87,96 @@ const SwimlaneBoard = () => {
     setFilteredTasks(filtered);
   };
 
-  const handleModalSubmit = () => {
+  const handleModalSubmit = async () => {
     if (!draggedTask || !newStatus) return;
 
+    const updatedTask = { ...draggedTask, status: newStatus };
+    await axios.put(`${url}/api/tasks/${draggedTask._id}`, updatedTask);
+
     const updatedTasks = tasks.map((t) =>
-      t.title === draggedTask.title
-        ? { ...t, status: newStatus, ...formData }
-        : t
+      t._id === draggedTask._id ? updatedTask : t
     );
 
-    const updatedHistory = [
-      ...taskHistory,
-      {
-        task: draggedTask.title,
-        from: draggedTask.status,
-        to: newStatus,
-        date: new Date().toISOString(),
-      },
-    ];
+    const newHistoryEntry = {
+      task: draggedTask.title,
+      from: draggedTask.status,
+      to: newStatus,
+      date: new Date().toISOString(),
+      additionalInfo: formData.additionalInfo,
+    };
+
+    await axios.post(`${url}/api/task-history`, newHistoryEntry);
+
+    await fetchTaskHistory(draggedTask.title);
+
+    await fetchTasks();
 
     setTasks(updatedTasks);
     setFilteredTasks(updatedTasks);
-    setTaskHistory(updatedHistory);
     onCloseAdditionalInfo();
     setDraggedTask(null);
     setNewStatus("");
+    setFormData({ title: "", additionalInfo: "" });
   };
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleAddTask = async () => {
+    const newTask = { title: formData.title, status: "to-do" };
+    const response = await axios.post(`${url}/api/tasks`, newTask);
+    setTasks([...tasks, response.data]);
+    setFilteredTasks([...tasks, response.data]);
+    setFormData({ title: "", additionalInfo: "" });
+  };
+
+  const handleEditTask = (task) => {
+    setSelectedTask(task);
+    setFormData({ title: task.title });
+    setIsEditModalOpen(true);
+  };
+
+  const saveEditedTask = async () => {
+    if (!selectedTask || !formData.title) return;
+
+    const updatedTask = { ...selectedTask, title: formData.title };
+    await axios.put(`${url}/api/tasks/${selectedTask._id}`, updatedTask);
+
+    const updatedTasks = tasks.map((t) =>
+      t._id === selectedTask._id ? updatedTask : t
+    );
+    setTasks(updatedTasks);
+    setFilteredTasks(updatedTasks);
+    setIsEditModalOpen(false);
+    setSelectedTask(null);
+    setFormData({ title: "", additionalInfo: "" });
+  };
+
+  const handleDeleteTask = async () => {
+    await axios.delete(`${url}/api/tasks/${selectedTask._id}`);
+    const updatedTasks = tasks.filter((t) => t._id !== selectedTask._id);
+    setTasks(updatedTasks);
+    setFilteredTasks(updatedTasks);
+    setIsDeleteModalOpen(false);
+    setSelectedTask(null);
+  };
+
+  const openDeleteModal = (task) => {
+    setSelectedTask(task);
+    setIsDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+  };
+
+  const openHistoryModal = () => {
+    setIsHistoryModalOpen(true);
+  };
+
+  const closeHistoryModal = () => {
+    setIsHistoryModalOpen(false);
   };
 
   return (
@@ -145,6 +207,9 @@ const SwimlaneBoard = () => {
           onDragStart={handleDragStart}
           onDrop={handleDrop}
           onTaskClick={handleTaskClick}
+          openEditModal={handleEditTask}
+          openDeleteModal={openDeleteModal}
+          openHistoryModal={openHistoryModal}
         />
         <Column
           status="in-progress"
@@ -153,6 +218,9 @@ const SwimlaneBoard = () => {
           onDragStart={handleDragStart}
           onDrop={handleDrop}
           onTaskClick={handleTaskClick}
+          openEditModal={handleEditTask}
+          openDeleteModal={openDeleteModal}
+          openHistoryModal={openHistoryModal}
         />
         <Column
           status="done"
@@ -161,9 +229,25 @@ const SwimlaneBoard = () => {
           onDragStart={handleDragStart}
           onDrop={handleDrop}
           onTaskClick={handleTaskClick}
+          openEditModal={handleEditTask}
+          openDeleteModal={openDeleteModal}
+          openHistoryModal={openHistoryModal}
         />
       </Box>
 
+      <Box mt={5}>
+        <ChakraInput
+          name="title"
+          placeholder="Add new task"
+          value={formData.title}
+          onChange={handleInputChange}
+        />
+        <Button onClick={handleAddTask} colorScheme="blue" ml={3}>
+          Add Task
+        </Button>
+      </Box>
+
+      {/* Modal for Additional Information */}
       <Modal isOpen={isOpenAdditionalInfo} onClose={onCloseAdditionalInfo}>
         <ModalOverlay />
         <ModalContent>
@@ -181,30 +265,71 @@ const SwimlaneBoard = () => {
           </ModalBody>
           <ModalFooter>
             <Button colorScheme="blue" onClick={handleModalSubmit}>
-              Submit
+              Save
             </Button>
-            <Button variant="ghost" onClick={onCloseAdditionalInfo}>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Modal for Editing Tasks */}
+      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Edit Task</ModalHeader>
+          <ModalBody>
+            <FormControl>
+              <FormLabel>Title</FormLabel>
+              <ChakraInput
+                name="title"
+                value={formData.title}
+                onChange={handleInputChange}
+                placeholder="Edit task title"
+              />
+            </FormControl>
+          </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="blue" onClick={saveEditedTask}>
+              Save
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Modal for Deleting Tasks */}
+      <Modal isOpen={isDeleteModalOpen} onClose={closeDeleteModal}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Delete Task</ModalHeader>
+          <ModalBody>Are you sure you want to delete this task?</ModalBody>
+          <ModalFooter>
+            <Button colorScheme="red" onClick={handleDeleteTask}>
+              Delete
+            </Button>
+            <Button ml={3} onClick={closeDeleteModal}>
               Cancel
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
-      <Modal isOpen={isOpen} onClose={onClose}>
+      {/* Modal for Task History */}
+      <Modal isOpen={isHistoryModalOpen} onClose={closeHistoryModal}>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Task History for {selectedTask?.title}</ModalHeader>
+          <ModalHeader>Task History</ModalHeader>
           <ModalBody>
-            {taskHistory
-              .filter((entry) => entry.task === selectedTask?.title)
-              .map((entry, index) => (
-                <Box key={index} mb={2}>
-                  Moved from <strong>{entry.from}</strong> to{" "}
-                  <strong>{entry.to}</strong> on{" "}
-                  <strong>{new Date(entry.date).toLocaleString()}</strong>
-                </Box>
-              ))}
+            {taskHistory.map((entry, index) => (
+              <Box key={index} mb={3}>
+                <strong>{entry.task}</strong>: {entry.from} → {entry.to} <br />
+                <em>Date:</em> {new Date(entry.date).toLocaleDateString()}{" "}
+                <br />
+                <em>Additional Info:</em> {entry.additionalInfo}
+              </Box>
+            ))}
           </ModalBody>
+          <ModalFooter>
+            <Button onClick={closeHistoryModal}>Close</Button>
+          </ModalFooter>
         </ModalContent>
       </Modal>
     </Box>

@@ -1,0 +1,20 @@
+{
+  "tasks": [
+    {
+      "id": "1b87",
+      "title": "Task 1",
+      "status": "in-progress",
+      "originalStatus": "to-do"
+    }
+  ],
+  "taskHistory": [
+    {
+      "id": "a3d6",
+      "task": "Task 1",
+      "from": "to-do",
+      "to": "in-progress",
+      "date": "2024-09-09T14:45:28.721Z",
+      "additionalInfo": "Move it"
+    }
+  ]
+}

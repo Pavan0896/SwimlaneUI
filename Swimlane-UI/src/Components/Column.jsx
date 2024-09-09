@@ -1,6 +1,16 @@
-import { Box } from "@chakra-ui/react";
+import { Box, IconButton, HStack } from "@chakra-ui/react";
+import { EditIcon, DeleteIcon } from "@chakra-ui/icons";
 
-const Column = ({ status, title, items, onDragStart, onDrop, onTaskClick }) => {
+const Column = ({
+  status,
+  title,
+  items,
+  onDragStart,
+  onDrop,
+  onTaskClick,
+  openEditModal,
+  openDeleteModal,
+}) => {
   const handleDragOver = (e) => {
     e.preventDefault();
   };
@@ -33,9 +43,10 @@ const Column = ({ status, title, items, onDragStart, onDrop, onTaskClick }) => {
       >
         {title.text}
       </Box>
+
       {items.map((item) => (
         <Box
-          key={item.title}
+          key={item.id}
           bg="gray.50"
           p={3}
           mb={3}
@@ -52,7 +63,31 @@ const Column = ({ status, title, items, onDragStart, onDrop, onTaskClick }) => {
             bg: "gray.100",
           }}
         >
-          {item.title}
+          <HStack justify="space-between">
+            <Box>{item.title}</Box>
+
+            <HStack spacing={2}>
+              <IconButton
+                aria-label="Edit task"
+                icon={<EditIcon />}
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation(); 
+                  openEditModal(item); 
+                }}
+              />
+              <IconButton
+                aria-label="Delete task"
+                icon={<DeleteIcon />}
+                size="sm"
+                colorScheme="red"
+                onClick={(e) => {
+                  e.stopPropagation(); 
+                  openDeleteModal(item);
+                }}
+              />
+            </HStack>
+          </HStack>
         </Box>
       ))}
     </Box>
