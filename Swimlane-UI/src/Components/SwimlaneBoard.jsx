@@ -73,6 +73,7 @@ const SwimlaneBoard = () => {
 
   const handleTaskClick = (task) => {
     setSelectedTask(task);
+    setTaskHistory([]);
     fetchTaskHistory(task.title);
     openHistoryModal();
   };
@@ -318,14 +319,19 @@ const SwimlaneBoard = () => {
         <ModalContent>
           <ModalHeader>Task History</ModalHeader>
           <ModalBody>
-            {taskHistory.map((entry, index) => (
-              <Box key={index} mb={3}>
-                <strong>{entry.task}</strong>: {entry.from} → {entry.to} <br />
-                <em>Date:</em> {new Date(entry.date).toLocaleDateString()}{" "}
-                <br />
-                <em>Additional Info:</em> {entry.additionalInfo}
-              </Box>
-            ))}
+            {taskHistory.length > 0 ? (
+              taskHistory.map((entry, index) => (
+                <Box key={index} mb={3}>
+                  <strong>{entry.task}</strong>: {entry.from} → {entry.to}{" "}
+                  <br />
+                  <em>Date:</em> {new Date(entry.date).toLocaleDateString()}{" "}
+                  <br />
+                  <em>Additional Info:</em> {entry.additionalInfo}
+                </Box>
+              ))
+            ) : (
+              <Box>No history of the task</Box>
+            )}
           </ModalBody>
           <ModalFooter>
             <Button onClick={closeHistoryModal}>Close</Button>
